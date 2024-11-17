@@ -1,0 +1,16 @@
+pandas==2.2.2
+matplotlib==3.9.1
+seaborn==0.13.2
+scikit-learn==1.5.0
+torch==2.3.1
+torchvision==0.18.1
+open-clip-torch
+langchain==0.1.9
+langchain-openai==0.0.5
+langchain-experimental==0.0.52
+python-dotenv==1.0.0
+pydantic==2.6.0
+openai==1.10.0
+langchain-experimental==0.0.52
+
+
