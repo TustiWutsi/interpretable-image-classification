@@ -39,7 +39,12 @@ def dict_to_pydot(graph, class_domain_dict, class_label):
 
 class VisualClues(object):
     
-    def __init__(self, class_domain:str, class_labels_list:list):
+    def __init__(self, 
+                 class_domain:str,
+                 class_labels_list:list,
+                 visual_clue_tree_path=None
+                ):
+        
         self.class_domain = class_domain
         self.class_labels_list = class_labels_list
         self.llm_model = AzureChatOpenAI(
@@ -50,6 +55,7 @@ class VisualClues(object):
             openai_api_type=os.getenv('CHAT_OPEN_API_TYPE'),
             max_tokens=1024
             )
+        self.visual_clue_tree_path = visual_clue_tree_path
         
     def get_visual_parts(self):
         visual_parts_prompt = """
@@ -122,35 +128,46 @@ class VisualClues(object):
         """
         return visual_clues_sentences_prompt.format(visual_dict)
         
-    def get_visual_clues_class_domain_dict(self, visual_clues_filepath=None):
+    def get_visual_clues_class_domain_dict(self):
         
-        # get visual parts dict of the class_domain
-        visual_parts_dict = self.llm_model.predict(self.get_visual_parts())
+        # 
+        if os.path.exists(self.visual_clue_tree_path):
+            print(f"The file '{self.visual_clue_tree_path}' already exists.")
+            with open(self.visual_clue_tree_path, "r") as f:
+                self.class_domain_dict = json.load(f)
+        else:
         
-        # enrich dict with all visual attributes for each visual part of the class_domain
-        visual_parts_attributes_dict = self.llm_model.predict(self.get_visual_attributes(visual_parts_dict))
-        clean_visual_parts_attributes_dict = re.sub(r' {2,}', '', visual_parts_attributes_dict).replace("\n", "")
-        
-        # now that we get the tree structure for the class_domain, let's have a dedicated dictionary for each class_label
-        # we needed to ensure that visual_parts x visual_attributes are the same for all class_label
-        self.class_domain_dict = {}
-        
-        for class_label in self.class_labels_list:
-        
-            # enrich dict with attribute values of the class_label for each visual attribute of the class_domain
-            visual_parts_attributes_values_dict = self.llm_model.predict(self.get_attribute_values(clean_visual_parts_attributes_dict, class_label))
-            self.clean_dict_str = re.sub(r' {2,}', '', visual_parts_attributes_values_dict).replace("\n", "")
+            # get visual parts dict of the class_domain
+            visual_parts_dict = self.llm_model.predict(self.get_visual_parts())
             
-            # transform attributes values by a natural language sentence that gathers all information of the visual clue (the tree branch)
-            dict_with_sentences = self.llm_model.predict(self.get_visual_clues_natural_language(self.clean_dict_str))
-            clean_dict_with_sentences = re.sub(r' {2,}', ' ', dict_with_sentences).replace("\n", "")
-            self.clean_dict_with_sentences = ast.literal_eval(clean_dict_with_sentences)
+            # enrich dict with all visual attributes for each visual part of the class_domain
+            visual_parts_attributes_dict = self.llm_model.predict(self.get_visual_attributes(visual_parts_dict))
+            clean_visual_parts_attributes_dict = re.sub(r' {2,}', '', visual_parts_attributes_dict).replace("\n", "")
             
-            # flatten the dictionary by aggregating all branch information in one single key
-            flatten_dict_class_label = flatten_dict(self.clean_dict_with_sentences)
+            # now that we get the tree structure for the class_domain, let's have a dedicated dictionary for each class_label
+            # we needed to ensure that visual_parts x visual_attributes are the same for all class_label
+            self.class_domain_dict = {}
             
-            # add the class_label dict to the class_domain dict
-            self.class_domain_dict[class_label] = flatten_dict_class_label
+            for class_label in self.class_labels_list:
+            
+                # enrich dict with attribute values of the class_label for each visual attribute of the class_domain
+                visual_parts_attributes_values_dict = self.llm_model.predict(self.get_attribute_values(clean_visual_parts_attributes_dict, class_label))
+                self.clean_dict_str = re.sub(r' {2,}', '', visual_parts_attributes_values_dict).replace("\n", "")
+                
+                # transform attributes values by a natural language sentence that gathers all information of the visual clue (the tree branch)
+                dict_with_sentences = self.llm_model.predict(self.get_visual_clues_natural_language(self.clean_dict_str))
+                clean_dict_with_sentences = re.sub(r' {2,}', ' ', dict_with_sentences).replace("\n", "")
+                self.clean_dict_with_sentences = ast.literal_eval(clean_dict_with_sentences)
+                
+                # flatten the dictionary by aggregating all branch information in one single key
+                flatten_dict_class_label = flatten_dict(self.clean_dict_with_sentences)
+                
+                # add the class_label dict to the class_domain dict
+                self.class_domain_dict[class_label] = flatten_dict_class_label
+                
+                if self.visual_clue_tree_path:
+                    with open(f"{self.visual_clue_tree_path}.json", "w") as f:
+                        json.dump(self.class_domain_dict, f)
             
         # rearrange visual clues
         self.sorted_values_dict = {}
@@ -164,12 +181,9 @@ class VisualClues(object):
         
         self.class_domain_visual_clues_list = [value for values in self.sorted_values_dict.values() for value in values]
         self.class_domain_visual_clues_list = list(set(self.class_domain_visual_clues_list))
+
         
-        if visual_clues_filepath:
-            with open(f"{visual_clues_filepath}.json", "w") as f:
-                json.dump(self.sorted_values_dict, f)
-        
-    def get_visual_clues_embeddings(self):
+    def get_visual_clues_embeddings(self, visual_tree_path=None):
 
         clip_model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="laion2b_s34b_b79k")
         
