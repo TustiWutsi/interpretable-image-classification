@@ -125,7 +125,7 @@ class InterpretableImageClassifier(object):
         self.X_test = self.X_test.drop(columns=['class_label', 'image_name'])
         
         if select_most_important_features:
-            self.most_important_features_list = self.get_most_important_features()
+            self.get_most_important_features()
             self.X_train = self.X_train[self.most_important_features_list]
             self.X_test = self.X_test[self.most_important_features_list]
         
@@ -205,9 +205,7 @@ class InterpretableImageClassifier(object):
         plt.show()
         
         # we keep the the features that maximizes the accuracy of the model
-        best_features = list(perm_importance_df[:best_n_features]['Feature'])
-        
-        return best_features
+        self.most_important_features_list = list(perm_importance_df[:best_n_features]['Feature'])
     
     def calculate_feature_importance(self, method):
         
@@ -252,8 +250,6 @@ class InterpretableImageClassifier(object):
         df_pred = df_pred[self.X_test.columns]
         
         print_text = f"\nthe true class_label is : {image_name.split('/')[0].split('-')[1]}\nthe predicted class_label is : {self.model.predict(df_pred)[0]}"
-        #print(f"\nthe true class_label is : {image_name.split('/')[0].split('-')[1]}")
-        #print(f"the predicted class_label is : {self.model.predict(df_pred)[0]}")
         print(print_text)
         
         probas = list(self.model.predict_proba(df_pred)[0])
@@ -277,16 +273,13 @@ class InterpretableImageClassifier(object):
             buffer.seek(0)
             plot_image = Image.open(buffer)
             
-            # Create a new image with extra space for text
-            text_height = 100  # Height for text space
+            text_height = 100 
             combined_image = Image.new("RGB", (plot_image.width, plot_image.height + text_height), "white")
             combined_image.paste(plot_image, (0, 0))
             
-            # Add the printed text below the plot
             draw = ImageDraw.Draw(combined_image)
             text_position = (10, plot_image.height + 10)
             text_color = (0, 0, 0)  # Black text
-            
+
             draw.text(text_position, print_text, fill=text_color)
-            
             combined_image.save(output_path)
