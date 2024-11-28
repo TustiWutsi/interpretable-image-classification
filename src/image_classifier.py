@@ -4,7 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import xml.etree.ElementTree as ET
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+from IPython.display import display, HTML
+from io import BytesIO
 import open_clip
 import torch
 import torch.nn.functional as F
@@ -207,26 +209,34 @@ class InterpretableImageClassifier(object):
         
         return best_features
     
-    def calculate_feature_importance(self):
+    def calculate_feature_importance(self, method):
+        
         # Gini
-        importances = self.model.feature_importances_
-        feature_names = list(self.X_train.columns)
-        self.importance_df = pd.DataFrame({
-            "Feature": feature_names,
-            "Importance": importances
-        }).sort_values(by="Importance", ascending=False)
+        if method == 'gini':
+            importances = self.model.feature_importances_
+            feature_names = list(self.X_train.columns)
+            importance_df = pd.DataFrame({
+                "Feature": feature_names,
+                "Importance": importances
+            }).sort_values(by="Importance", ascending=False)
         
         # Permutation importance
-        perm_importance = permutation_importance(self.model, self.X_test, self.y_test, n_repeats=10, random_state=42)
+        elif method == 'permutation':
+            perm_importance = permutation_importance(self.model, self.X_test, self.y_test, n_repeats=10, random_state=42)
+            
+            importance_df = pd.DataFrame({
+                "Feature": feature_names,
+                "Importance": perm_importance.importances_mean,
+                "Importance Std": perm_importance.importances_std
+            }).sort_values(by="Importance", ascending=False)
+            
+        else:
+            raise ValueError("Feature importance method should be either 'gini' or 'permutation")
         
-        self.perm_importance_df = pd.DataFrame({
-            "Feature": feature_names,
-            "Importance": perm_importance.importances_mean,
-            "Importance Std": perm_importance.importances_std
-        }).sort_values(by="Importance", ascending=False)
+        return importance_df
         
     
-    def predict(self,image_name):
+    def predict(self,image_name, output_path=None):
         image_path = os.path.join(self.image_dir, image_name+'.jpg')
         annotation_path = os.path.join(self.annotation_dir, image_name)
         
@@ -241,8 +251,10 @@ class InterpretableImageClassifier(object):
         df_pred = pd.DataFrame.from_dict(image_text_similarities, orient='index').T
         df_pred = df_pred[self.X_test.columns]
         
-        print(f"\nthe true class_label is : {image_name.split('/')[0].split('-')[1]}")
-        print(f"the predicted class_label is : {self.model.predict(df_pred)[0]}")
+        print_text = f"\nthe true class_label is : {image_name.split('/')[0].split('-')[1]}\nthe predicted class_label is : {self.model.predict(df_pred)[0]}"
+        #print(f"\nthe true class_label is : {image_name.split('/')[0].split('-')[1]}")
+        #print(f"the predicted class_label is : {self.model.predict(df_pred)[0]}")
+        print(print_text)
         
         probas = list(self.model.predict_proba(df_pred)[0])
         class_labels = list(self.model.classes_)
@@ -256,3 +268,25 @@ class InterpretableImageClassifier(object):
         
         ax2.barh(sorted_prediction_probas.keys(), sorted_prediction_probas.values())
         ax2.set_title('Model output probabilities for each class_label')
+        
+        plt.tight_layout()
+        
+        if output_path:
+            buffer = BytesIO()
+            fig.savefig(buffer, format='png', bbox_inches='tight')
+            buffer.seek(0)
+            plot_image = Image.open(buffer)
+            
+            # Create a new image with extra space for text
+            text_height = 100  # Height for text space
+            combined_image = Image.new("RGB", (plot_image.width, plot_image.height + text_height), "white")
+            combined_image.paste(plot_image, (0, 0))
+            
+            # Add the printed text below the plot
+            draw = ImageDraw.Draw(combined_image)
+            text_position = (10, plot_image.height + 10)
+            text_color = (0, 0, 0)  # Black text
+            
+            draw.text(text_position, print_text, fill=text_color)
+            
+            combined_image.save(output_path)

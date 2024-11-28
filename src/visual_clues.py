@@ -147,15 +147,17 @@ class VisualClues(object):
             # now that we get the tree structure for the class_domain, let's have a dedicated dictionary for each class_label
             # we needed to ensure that visual_parts x visual_attributes are the same for all class_label
             self.class_domain_dict = {}
+            self.class_domain_tree = {}
             
             for class_label in self.class_labels_list:
             
                 # enrich dict with attribute values of the class_label for each visual attribute of the class_domain
                 visual_parts_attributes_values_dict = self.llm_model.predict(self.get_attribute_values(clean_visual_parts_attributes_dict, class_label))
-                self.clean_dict_str = re.sub(r' {2,}', '', visual_parts_attributes_values_dict).replace("\n", "")
+                clean_dict_str = re.sub(r' {2,}', '', visual_parts_attributes_values_dict).replace("\n", "")
+                self.class_domain_tree[class_label] = ast.literal_eval(clean_dict_str)
                 
                 # transform attributes values by a natural language sentence that gathers all information of the visual clue (the tree branch)
-                dict_with_sentences = self.llm_model.predict(self.get_visual_clues_natural_language(self.clean_dict_str))
+                dict_with_sentences = self.llm_model.predict(self.get_visual_clues_natural_language(clean_dict_str))
                 clean_dict_with_sentences = re.sub(r' {2,}', ' ', dict_with_sentences).replace("\n", "")
                 self.clean_dict_with_sentences = ast.literal_eval(clean_dict_with_sentences)
                 
@@ -202,7 +204,7 @@ class VisualClues(object):
         
         # Add nodes and edges recursively from the nested dictionary
         graph.add_node(pydot.Node(class_label))
-        dict_to_pydot(graph, self.class_domain_dict[class_label], class_label)
+        dict_to_pydot(graph, self.class_domain_tree[class_label], class_label)
         
         # Save the graph to a PNG file and display it
         graph.write_png(f'{image_path}.png')

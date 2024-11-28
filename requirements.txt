@@ -10,5 +10,6 @@ langchain-openai==0.0.5
 pydantic==2.6.0
 openai==1.10.0
 python-dotenv==1.0.0
+shap==0.46.0
 
 
